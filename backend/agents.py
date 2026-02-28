@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 from dataclasses import dataclass, field
 
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent / ".env")
+
 import chess
 import anthropic
 import openai
@@ -55,12 +58,11 @@ def build_prompt(board: chess.Board, personality: str) -> str:
 
     # Last few moves for context
     move_history = []
-    temp_board = board.copy()
-    moves = list(board.move_stack)
     replay = chess.Board()
-    for m in moves[-10:]:
+    for m in board.move_stack:
         move_history.append(replay.san(m))
         replay.push(m)
+    move_history = move_history[-10:]
 
     prompt = f"""{personality}
 
