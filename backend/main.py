@@ -147,8 +147,20 @@ def _run_tournament():
             "black": black,
         })
 
+    def on_game_end(game_record):
+        sync_broadcast({
+            "type": "game_end",
+            "game_num": game_record["game_num"],
+            "result": game_record["result"],
+            "reason": game_record["reason"],
+            "white": game_record["white"],
+            "black": game_record["black"],
+            "total_moves": game_record["total_moves"],
+            "standings": arena.get_standings(),
+        })
+
     try:
-        arena.run_full_tournament(on_move=on_move, on_game_start=on_game_start)
+        arena.run_full_tournament(on_move=on_move, on_game_start=on_game_start, on_game_end=on_game_end)
         sync_broadcast({"type": "tournament_complete", "standings": arena.get_standings()})
     finally:
         tournament_running = False

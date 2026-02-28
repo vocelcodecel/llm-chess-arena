@@ -8,10 +8,19 @@ export default function MoveList({ moves }) {
   }, [moves])
 
   if (!moves || moves.length === 0) {
-    return <div style={{ opacity: 0.5, fontSize: '14px' }}>Waiting for moves...</div>
+    return (
+      <div style={{
+        background: '#2a2a4a',
+        borderRadius: '8px',
+        padding: '16px',
+      }}>
+        <h3 style={{ margin: '0 0 8px', fontSize: '14px', color: '#ffd700' }}>📜 Moves</h3>
+        <div style={{ opacity: 0.4, fontSize: '13px' }}>Waiting for moves...</div>
+      </div>
+    )
   }
 
-  // Pair moves into rows (white, black)
+  // Pair into rows
   const rows = []
   for (let i = 0; i < moves.length; i += 2) {
     rows.push({
@@ -21,36 +30,53 @@ export default function MoveList({ moves }) {
     })
   }
 
+  const MoveCell = ({ move }) => {
+    if (!move) return <span style={{ width: '70px', display: 'inline-block' }} />
+    const isNew = moves.indexOf(move) >= moves.length - 2
+    return (
+      <span style={{
+        width: '70px',
+        display: 'inline-block',
+        color: move.fallback ? '#ff6b6b' : isNew ? '#4CAF50' : '#e0e0e0',
+        fontWeight: isNew ? 'bold' : 'normal',
+        transition: 'color 0.5s',
+      }}>
+        {move.san}{move.fallback ? ' 💀' : ''}
+      </span>
+    )
+  }
+
   return (
-    <div>
-      <h2 style={{ marginBottom: '8px', fontSize: '18px' }}>📜 Moves</h2>
+    <div style={{
+      background: '#2a2a4a',
+      borderRadius: '8px',
+      padding: '16px',
+    }}>
+      <h3 style={{ margin: '0 0 8px', fontSize: '14px', color: '#ffd700' }}>📜 Moves</h3>
       <div style={{
-        maxHeight: '360px',
+        maxHeight: '400px',
         overflowY: 'auto',
         fontFamily: 'monospace',
         fontSize: '13px',
-        lineHeight: '1.8',
+        lineHeight: '2',
       }}>
         {rows.map((r) => (
-          <div key={r.num} style={{ display: 'flex', gap: '8px' }}>
-            <span style={{ width: '30px', opacity: 0.4, textAlign: 'right' }}>{r.num}.</span>
-            <span style={{
-              width: '70px',
-              color: r.white?.fallback ? '#ff6b6b' : '#e0e0e0',
-            }}>
-              {r.white?.san}{r.white?.fallback ? ' 💀' : ''}
-            </span>
-            {r.black && (
-              <span style={{
-                width: '70px',
-                color: r.black?.fallback ? '#ff6b6b' : '#e0e0e0',
-              }}>
-                {r.black?.san}{r.black?.fallback ? ' 💀' : ''}
-              </span>
-            )}
+          <div key={r.num} style={{ display: 'flex', gap: '6px' }}>
+            <span style={{ width: '28px', opacity: 0.35, textAlign: 'right', flexShrink: 0 }}>{r.num}.</span>
+            <MoveCell move={r.white} />
+            <MoveCell move={r.black} />
           </div>
         ))}
         <div ref={endRef} />
+      </div>
+      <div style={{
+        marginTop: '8px',
+        fontSize: '11px',
+        opacity: 0.4,
+        borderTop: '1px solid #333',
+        paddingTop: '6px',
+      }}>
+        {moves.length} moves • {moves.filter(m => m.fallback).length} fallbacks 💀
       </div>
     </div>
   )

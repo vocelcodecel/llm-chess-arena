@@ -50,6 +50,7 @@ class Tournament:
         white: AgentConfig,
         black: AgentConfig,
         on_move=None,
+        on_game_end=None,
     ) -> GameResult:
         """Play one game and update standings."""
         self.current_game = {
@@ -97,21 +98,36 @@ class Tournament:
             "total_moves": len(result.moves),
             "fallbacks": result.total_fallbacks,
             "pgn_file": pgn_path.name,
+            "moves": [
+                {
+                    "san": m.san,
+                    "uci": m.uci,
+                    "side": m.side,
+                    "agent": m.agent,
+                    "fallback": m.fallback,
+                    "fen": m.fen_after,
+                }
+                for m in result.moves
+            ],
         }
         self.games.append(game_record)
         self.current_game = None
 
         self._save_results()
+
+        if on_game_end:
+            on_game_end(game_record)
+
         return result
 
-    def run_full_tournament(self, on_move=None, on_game_start=None) -> dict:
+    def run_full_tournament(self, on_move=None, on_game_start=None, on_game_end=None) -> dict:
         """Run all pairings and return final standings."""
         pairings = self.generate_pairings()
 
         for i, (white, black) in enumerate(pairings):
             if on_game_start:
                 on_game_start(i + 1, len(pairings), white.name, black.name)
-            self.play_match(white, black, on_move=on_move)
+            self.play_match(white, black, on_move=on_move, on_game_end=on_game_end)
 
         return self.get_standings()
 
