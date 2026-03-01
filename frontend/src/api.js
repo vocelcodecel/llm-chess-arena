@@ -30,6 +30,16 @@ export async function startTournament() {
   return res.json()
 }
 
+export async function resetTournament() {
+  const res = await fetch(`${API_BASE}/tournament/reset`, { method: 'POST' })
+  return res.json()
+}
+
+export async function pauseTournament() {
+  const res = await fetch(`${API_BASE}/tournament/pause`, { method: 'POST' })
+  return res.json()
+}
+
 export function connectWebSocket(onMessage) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const ws = new WebSocket(`${protocol}//${window.location.host}/ws`)

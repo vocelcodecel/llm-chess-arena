@@ -1,17 +1,52 @@
 import React from 'react'
 
-const cellStyle = { padding: '8px 16px', textAlign: 'center', borderBottom: '1px solid #333' }
-const headerStyle = { ...cellStyle, fontWeight: 'bold', borderBottom: '2px solid #555', color: '#ffd700' }
+const cellStyle = {
+  padding: '5px 6px',
+  textAlign: 'center',
+  borderBottom: '1px solid #333',
+  fontSize: '12px',
+  whiteSpace: 'nowrap',
+}
+const headerStyle = {
+  ...cellStyle,
+  fontWeight: 'bold',
+  borderBottom: '2px solid #555',
+  color: '#ffd700',
+  fontSize: '11px',
+}
 
 export default function Leaderboard({ standings }) {
   if (!standings || standings.length === 0) {
-    return <div style={{ opacity: 0.5 }}>No standings yet</div>
+    return (
+      <div style={{
+        background: '#2a2a4a',
+        borderRadius: '8px',
+        padding: '16px',
+      }}>
+        <h3 style={{ margin: '0 0 8px', fontSize: '14px', color: '#ffd700' }}>🏆 Standings</h3>
+        <div style={{ opacity: 0.4, fontSize: '13px' }}>No standings yet</div>
+      </div>
+    )
   }
 
   return (
-    <div>
-      <h2 style={{ marginBottom: '12px', fontSize: '18px' }}>🏆 Standings</h2>
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+    <div style={{
+      background: '#2a2a4a',
+      borderRadius: '8px',
+      padding: '12px',
+      overflow: 'hidden',
+    }}>
+      <h3 style={{ margin: '0 0 8px', fontSize: '14px', color: '#ffd700' }}>🏆 Standings</h3>
+      <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: '22px' }} />
+          <col />
+          <col style={{ width: '26px' }} />
+          <col style={{ width: '26px' }} />
+          <col style={{ width: '26px' }} />
+          <col style={{ width: '32px' }} />
+          <col style={{ width: '28px' }} />
+        </colgroup>
         <thead>
           <tr>
             <th style={headerStyle}>#</th>
@@ -27,7 +62,12 @@ export default function Leaderboard({ standings }) {
           {standings.map((s) => (
             <tr key={s.name}>
               <td style={cellStyle}>{s.rank}</td>
-              <td style={{ ...cellStyle, textAlign: 'left' }}>{s.name}</td>
+              <td style={{
+                ...cellStyle,
+                textAlign: 'left',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>{s.name}</td>
               <td style={cellStyle}>{s.wins}</td>
               <td style={cellStyle}>{s.draws}</td>
               <td style={cellStyle}>{s.losses}</td>
@@ -37,7 +77,7 @@ export default function Leaderboard({ standings }) {
           ))}
         </tbody>
       </table>
-      <div style={{ fontSize: '11px', opacity: 0.4, marginTop: '4px' }}>💀 = random fallback moves</div>
+      <div style={{ fontSize: '10px', opacity: 0.4, marginTop: '6px' }}>💀 = random fallback moves</div>
     </div>
   )
 }

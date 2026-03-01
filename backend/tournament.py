@@ -2,12 +2,15 @@
 
 import json
 import itertools
+import logging
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 
 from agents import AgentConfig
 from game import play_game, GameResult
+
+log = logging.getLogger(__name__)
 
 GAMES_DIR = Path(__file__).parent / "games"
 RESULTS_FILE = Path(__file__).parent / "results.json"
@@ -120,15 +123,33 @@ class Tournament:
 
         return result
 
-    def run_full_tournament(self, on_move=None, on_game_start=None, on_game_end=None) -> dict:
-        """Run all pairings and return final standings."""
-        pairings = self.generate_pairings()
+    def _completed_pairing_keys(self) -> set[tuple[str, str]]:
+        return {(g["white"], g["black"]) for g in self.games}
 
-        for i, (white, black) in enumerate(pairings):
+    def run_full_tournament(self, on_move=None, on_game_start=None, on_game_end=None, on_between_games=None) -> dict:
+        """Run all pairings (skipping already-completed ones) and return final standings."""
+        pairings = self.generate_pairings()
+        done = self._completed_pairing_keys()
+        remaining = [(w, b) for w, b in pairings if (w.name, b.name) not in done]
+
+        log.info(
+            "Tournament: %d total pairings, %d already done, %d remaining",
+            len(pairings), len(done), len(remaining),
+        )
+
+        for i, (white, black) in enumerate(remaining):
+            if on_between_games and i > 0:
+                if not on_between_games():
+                    log.info("Tournament stopped by on_between_games callback")
+                    break
+
+            game_num = len(self.games) + 1
+            log.info("=== Game %d/%d: %s vs %s ===", game_num, len(pairings), white.name, black.name)
             if on_game_start:
-                on_game_start(i + 1, len(pairings), white.name, black.name)
+                on_game_start(game_num, len(pairings), white.name, black.name)
             self.play_match(white, black, on_move=on_move, on_game_end=on_game_end)
 
+        log.info("Tournament complete!")
         return self.get_standings()
 
     def get_standings(self) -> list[dict]:

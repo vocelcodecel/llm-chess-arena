@@ -1,5 +1,6 @@
 """Single game runner — plays one game between two agents."""
 
+import logging
 import chess
 import chess.pgn
 import datetime
@@ -7,6 +8,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from agents import AgentConfig, get_move
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,6 +44,8 @@ def play_game(
     on_move: Optional[callable] = None,
 ) -> GameResult:
     """Play a full game between two agents. Returns GameResult."""
+
+    log.info("Game start: %s (white) vs %s (black)", white.name, black.name)
 
     board = chess.Board()
     move_records: list[MoveRecord] = []
@@ -114,6 +119,11 @@ def play_game(
 
     total_fallbacks = sum(1 for r in move_records if r.fallback)
     total_illegal = sum(r.attempts - 1 for r in move_records if r.attempts > 1)
+
+    log.info(
+        "Game over: %s vs %s → %s (%s) | %d moves, %d fallbacks",
+        white.name, black.name, result, reason, len(move_records), total_fallbacks,
+    )
 
     return GameResult(
         white=white.name,

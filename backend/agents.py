@@ -1,5 +1,6 @@
 """LLM agent adapter — translates board state into a move."""
 
+import logging
 import os
 import random
 import time
@@ -13,6 +14,8 @@ import chess
 import anthropic
 import openai
 
+log = logging.getLogger(__name__)
+
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 # ---------------------------------------------------------------------------
@@ -22,11 +25,14 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 @dataclass
 class AgentConfig:
     name: str
-    provider: str          # "anthropic" | "openai" | "random"
-    model: str             # e.g. "claude-opus-4-6" or "gpt-5.3-codex"
+    provider: str          # "anthropic" | "openai" | "openai_reasoning"
+    model: str             # e.g. "claude-opus-4-6" or "o3-mini"
     personality_file: str  # filename inside prompts/
     temperature: float = 0.7
     max_retries: int = 3
+    thinking: bool = False          # Anthropic extended thinking
+    thinking_budget: int = 4096     # token budget for thinking
+    reasoning_effort: str = "medium"  # OpenAI reasoning models: low/medium/high
     stats: dict = field(default_factory=lambda: {
         "illegal_attempts": 0,
         "random_fallbacks": 0,
@@ -37,7 +43,9 @@ DEFAULT_AGENTS = [
     AgentConfig("Magnus Chatbot",  "anthropic", "claude-opus-4-6",   "aggressive.txt", temperature=0.8),
     AgentConfig("Stockfished",     "anthropic", "claude-sonnet-4-6", "cautious.txt",   temperature=0.3),
     AgentConfig("GPTambit",        "openai",    "gpt-5.3-codex",    "gambit.txt",      temperature=0.9),
-    AgentConfig("Random Randy",    "random",    "",                  "",                temperature=0.0),
+    AgentConfig("Haiku Blitz",      "anthropic", "claude-haiku-4-5",  "blitz.txt",       temperature=0.6),
+    AgentConfig("Deep Think",      "anthropic", "claude-sonnet-4-6", "thinker.txt",    temperature=1.0, thinking=True, thinking_budget=4096),
+    AgentConfig("o3 Mastermind",   "openai_reasoning", "o3-mini",    "mastermind.txt",  reasoning_effort="medium"),
 ]
 
 
@@ -87,17 +95,36 @@ Do NOT include any other text, explanation, or formatting. Just the move."""
 # ---------------------------------------------------------------------------
 
 def _call_anthropic(prompt: str, config: AgentConfig) -> str:
+    log.debug("[%s] Calling Anthropic %s (thinking=%s)", config.name, config.model, config.thinking)
     client = anthropic.Anthropic()
-    resp = client.messages.create(
+
+    kwargs = dict(
         model=config.model,
-        max_tokens=16,
-        temperature=config.temperature,
         messages=[{"role": "user", "content": prompt}],
     )
-    return resp.content[0].text.strip().lower()
+
+    if config.thinking:
+        kwargs["max_tokens"] = config.thinking_budget + 256
+        kwargs["temperature"] = 1  # required for extended thinking
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": config.thinking_budget}
+    else:
+        kwargs["max_tokens"] = 16
+        kwargs["temperature"] = config.temperature
+
+    resp = client.messages.create(**kwargs)
+
+    # With thinking enabled, the text block comes after the thinking block
+    for block in resp.content:
+        if block.type == "text":
+            text = block.text.strip().lower()
+            log.debug("[%s] Anthropic returned: %s", config.name, text)
+            return text
+
+    return ""
 
 
 def _call_openai(prompt: str, config: AgentConfig) -> str:
+    log.debug("[%s] Calling OpenAI %s", config.name, config.model)
     client = openai.OpenAI()
     resp = client.chat.completions.create(
         model=config.model,
@@ -105,7 +132,23 @@ def _call_openai(prompt: str, config: AgentConfig) -> str:
         temperature=config.temperature,
         messages=[{"role": "user", "content": prompt}],
     )
-    return resp.choices[0].message.content.strip().lower()
+    text = resp.choices[0].message.content.strip().lower()
+    log.debug("[%s] OpenAI returned: %s", config.name, text)
+    return text
+
+
+def _call_openai_reasoning(prompt: str, config: AgentConfig) -> str:
+    log.debug("[%s] Calling OpenAI reasoning %s (effort=%s)", config.name, config.model, config.reasoning_effort)
+    client = openai.OpenAI()
+    resp = client.chat.completions.create(
+        model=config.model,
+        max_completion_tokens=1024,
+        reasoning_effort=config.reasoning_effort,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = resp.choices[0].message.content.strip().lower()
+    log.debug("[%s] OpenAI reasoning returned: %s", config.name, text)
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -120,39 +163,46 @@ def get_move(board: chess.Board, config: AgentConfig) -> tuple[chess.Move, dict]
     # Random agent — no LLM call
     if config.provider == "random":
         move = random.choice(legal_moves)
+        log.info("[%s] Random move: %s", config.name, move.uci())
         return move, {"raw": move.uci(), "attempts": 0, "fallback": False}
 
     personality = _load_personality(config.personality_file)
     prompt = build_prompt(board, personality)
 
-    caller = _call_anthropic if config.provider == "anthropic" else _call_openai
+    callers = {
+        "anthropic": _call_anthropic,
+        "openai": _call_openai,
+        "openai_reasoning": _call_openai_reasoning,
+    }
+    caller = callers[config.provider]
 
     for attempt in range(1, config.max_retries + 1):
         try:
             raw = caller(prompt, config)
-            # Clean up common LLM noise
             raw = raw.replace("```", "").replace("`", "").strip().split()[0]
 
-            # Try parsing as UCI
             move = chess.Move.from_uci(raw)
             if move in legal_moves:
+                log.info("[%s] Move: %s (attempt %d)", config.name, raw, attempt)
                 return move, {"raw": raw, "attempts": attempt, "fallback": False}
 
-            # Maybe they gave SAN?
             try:
                 move = board.parse_san(raw)
                 if move in legal_moves:
+                    log.info("[%s] Move (SAN→UCI): %s (attempt %d)", config.name, raw, attempt)
                     return move, {"raw": raw, "attempts": attempt, "fallback": False}
             except ValueError:
                 pass
 
+            log.warning("[%s] Illegal move '%s' (attempt %d/%d)", config.name, raw, attempt, config.max_retries)
             config.stats["illegal_attempts"] += 1
 
         except Exception as e:
+            log.error("[%s] API error on attempt %d: %s", config.name, attempt, e)
             config.stats["illegal_attempts"] += 1
             time.sleep(0.5)
 
-    # All retries exhausted — random fallback
     config.stats["random_fallbacks"] += 1
     move = random.choice(legal_moves)
+    log.warning("[%s] All retries exhausted → random fallback: %s", config.name, move.uci())
     return move, {"raw": "RANDOM_FALLBACK", "attempts": config.max_retries, "fallback": True}

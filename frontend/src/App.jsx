@@ -4,7 +4,7 @@ import Leaderboard from './components/Leaderboard'
 import MoveList from './components/MoveList'
 import GameSelector from './components/GameSelector'
 import GameHeader from './components/GameHeader'
-import { fetchStandings, fetchGames, startTournament, connectWebSocket } from './api'
+import { fetchStandings, fetchGames, fetchStatus, startTournament, resetTournament, pauseTournament, connectWebSocket } from './api'
 
 export default function App() {
   const [standings, setStandings] = useState([])
@@ -21,6 +21,8 @@ export default function App() {
   const [replayMode, setReplayMode] = useState(false)
   const [replayIndex, setReplayIndex] = useState(0)
   const [replayMoves, setReplayMoves] = useState([])
+  const [hasPrevious, setHasPrevious] = useState(false)
+  const [paused, setPaused] = useState(false)
   const wsRef = useRef(null)
 
   const handleWsMessage = useCallback((event) => {
@@ -51,22 +53,39 @@ export default function App() {
       setGameResult(event.result)
       fetchStandings().then(setStandings)
       fetchGames().then(setGames)
+    } else if (event.type === 'tournament_paused') {
+      setPaused(true)
+    } else if (event.type === 'tournament_resumed') {
+      setPaused(false)
     } else if (event.type === 'tournament_complete') {
       setStandings(event.standings)
       setRunning(false)
+      setPaused(false)
+      setHasPrevious(true)
       fetchGames().then(setGames)
     }
   }, [])
 
   useEffect(() => {
     fetchStandings().then(setStandings)
-    fetchGames().then(setGames)
+    fetchGames().then((g) => { setGames(g); setHasPrevious(g.length > 0) })
+    fetchStatus().then((s) => { if (s.running) setRunning(true); if (s.paused) setPaused(true) })
     wsRef.current = connectWebSocket(handleWsMessage)
     return () => wsRef.current?.close()
   }, [handleWsMessage])
 
   const handleStart = async () => {
     setRunning(true)
+    setMoves([])
+    setCurrentFen('start')
+    setLastMove(null)
+    setGameResult(null)
+    setReplayMode(false)
+    await startTournament()
+  }
+
+  const handleReset = async () => {
+    await resetTournament()
     setStandings([])
     setGames([])
     setMoves([])
@@ -74,7 +93,13 @@ export default function App() {
     setLastMove(null)
     setGameResult(null)
     setReplayMode(false)
-    await startTournament()
+    setHasPrevious(false)
+    setGameNum(0)
+    setTotalGames(0)
+  }
+
+  const handlePause = async () => {
+    await pauseTournament()
   }
 
   // Replay a completed game move by move
@@ -130,37 +155,74 @@ export default function App() {
         <h1 style={{ fontSize: '36px', marginBottom: '4px', color: '#fff' }}>♟️ LLM Chess Arena</h1>
         <p style={{ opacity: 0.5, fontSize: '14px' }}>Language models. Legal chess. Pure chaos.</p>
         {!running && (
-          <button
-            onClick={handleStart}
-            style={{
-              marginTop: '16px',
-              padding: '12px 32px',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              background: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              transition: 'background 0.2s',
-            }}
-            onMouseOver={(e) => e.target.style.background = '#45a049'}
-            onMouseOut={(e) => e.target.style.background = '#4CAF50'}
-          >
-            🏁 Start Tournament
-          </button>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '16px' }}>
+            <button
+              onClick={handleStart}
+              style={{
+                padding: '12px 32px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                background: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={(e) => e.target.style.background = '#45a049'}
+              onMouseOut={(e) => e.target.style.background = '#4CAF50'}
+            >
+              {hasPrevious ? '▶️ Resume Tournament' : '🏁 Start Tournament'}
+            </button>
+            {hasPrevious && (
+              <button
+                onClick={handleReset}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  background: 'transparent',
+                  color: '#ff6b6b',
+                  border: '1px solid #ff6b6b',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseOver={(e) => { e.target.style.background = '#ff6b6b'; e.target.style.color = '#fff' }}
+                onMouseOut={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#ff6b6b' }}
+              >
+                🗑️ Start Fresh
+              </button>
+            )}
+          </div>
         )}
         {running && (
-          <div style={{
-            marginTop: '12px',
-            padding: '8px 16px',
-            background: '#2a2a4a',
-            borderRadius: '8px',
-            display: 'inline-block',
-            fontSize: '14px',
-            color: '#4CAF50',
-          }}>
-            ⏳ Tournament in progress...
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', alignItems: 'center', marginTop: '16px' }}>
+            <div style={{
+              padding: '8px 16px',
+              background: '#2a2a4a',
+              borderRadius: '8px',
+              fontSize: '14px',
+              color: paused ? '#ffd700' : '#4CAF50',
+            }}>
+              {paused ? '⏸️ Paused — will stop after current game' : '⏳ Tournament in progress...'}
+            </div>
+            <button
+              onClick={handlePause}
+              style={{
+                padding: '8px 20px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                background: paused ? '#4CAF50' : '#ff9800',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+            >
+              {paused ? '▶️ Resume' : '⏸️ Pause'}
+            </button>
           </div>
         )}
       </div>
