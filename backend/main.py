@@ -117,10 +117,13 @@ def sync_broadcast(event: dict):
 # REST endpoints
 # ---------------------------------------------------------------------------
 
+AGENT_INFO = {a.name: {"provider": a.provider, "model": a.model, "thinking": a.thinking} for a in DEFAULT_AGENTS}
+
+
 @app.get("/api/agents")
 def get_agents():
     return [
-        {"name": a.name, "provider": a.provider, "model": a.model, "personality_file": a.personality_file}
+        {"name": a.name, "provider": a.provider, "model": a.model, "personality_file": a.personality_file, "thinking": a.thinking}
         for a in DEFAULT_AGENTS
     ]
 
@@ -129,7 +132,13 @@ def get_agents():
 def get_standings():
     if arena is None:
         return []
-    return arena.get_standings()
+    standings = arena.get_standings()
+    for s in standings:
+        info = AGENT_INFO.get(s["name"], {})
+        s["model"] = info.get("model", "")
+        s["provider"] = info.get("provider", "")
+        s["thinking"] = info.get("thinking", False)
+    return standings
 
 
 @app.get("/api/games")

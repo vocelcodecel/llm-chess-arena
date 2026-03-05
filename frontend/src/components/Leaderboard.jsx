@@ -67,7 +67,14 @@ export default function Leaderboard({ standings }) {
                 textAlign: 'left',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-              }}>{s.name}</td>
+              }}>
+                <div>{s.name}</div>
+                {s.model && (
+                  <div style={{ fontSize: '9px', opacity: 0.4, marginTop: '1px' }}>
+                    {s.model}{s.thinking ? ' 🧠' : ''}
+                  </div>
+                )}
+              </td>
               <td style={cellStyle}>{s.wins}</td>
               <td style={cellStyle}>{s.draws}</td>
               <td style={cellStyle}>{s.losses}</td>

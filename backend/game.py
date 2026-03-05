@@ -23,6 +23,7 @@ class MoveRecord:
     attempts: int
     fallback: bool
     fen_after: str
+    tool_calls: list = field(default_factory=list)
 
 
 @dataclass
@@ -72,6 +73,7 @@ def play_game(
             attempts=meta["attempts"],
             fallback=meta["fallback"],
             fen_after=board.fen(),
+            tool_calls=meta.get("tool_calls", []),
         )
         move_records.append(record)
 
